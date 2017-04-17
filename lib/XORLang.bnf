@@ -1,0 +1,30 @@
+grammar XORLang;
+
+program: (stmt END?)+;
+
+stmt
+  : xor
+  | write
+  | clear
+  | EVAL
+  | MODE
+  | COMMENT
+  | END
+  ;
+
+xor   : XOP (STRING|NUM|ARRAY)  ;
+clear : 'XX'                    ;
+write : 'print' STRING?         ;
+EVAL  : 'E' STRING              ;
+MODE  : 'M' ' '* ('C'|'S')      ;
+
+XOP     : ('X'|'<')                            ;
+IOP     : ('I'|'>')                            ;
+NUM     : [0-9]+                               ;
+STRING  : (DOUBLE|SINGLE)                      ;
+SINGLE  : '\'' .*? '\'' -> type(STRING)        ;
+DOUBLE  : '"' .*? '"'   -> type(STRING)        ;
+ARRAY   : '[' (STRING|NUM|ARRAY|','|' ')+ ']'  ;
+SPACE   : [ \t\n\r] -> skip                    ;
+COMMENT : '#' ~('\n'|'\r')* '\r'? '\n' -> skip ;
+END     : '|'                                  ;

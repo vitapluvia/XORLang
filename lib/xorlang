@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+import sys
+import commands
+from pwn import xor
+from antlr4 import *
+
+DEBUG = 0
+TOKEN_END = '|'
+DEFAULT_STATE = '\0'
+DEFAULT_MODE = 'S'
+
+def setup(): commands.getoutput('antlr4 -Dlanguage=Python2 XORLang.bnf')
+def clean(): commands.getoutput('rm *Pars* *List* *Lex* *Vis* *.tokens 2>/dev/null')
+
+try:
+  '''Import only when files exist'''
+  from XORLangLexer import XORLangLexer
+  from XORLangParser import XORLangParser
+except ImportError:
+  setup()
+finally:
+  from XORLangLexer import XORLangLexer
+  from XORLangParser import XORLangParser
+
+
+def castValue(value):
+  if DEBUG: print 'Casting: {}'.format(value)
+  return eval(value)
+
+
+def getX(child):
+  value = ''
+
+  if DEBUG: print child.toStringTree()
+  if child.children[0].getText() == TOKEN_END: return value
+  try: value = child.children[0].children[1].getText()
+  except: print 'ERROR: Failed executing program on line: {}.'.format(child.children[0].symbol.line)
+
+  return value
+
+
+def getState(xorState, mode, value):
+  value = castValue(value)
+  if DEBUG: print 'Updating XOR State with: {}'.format(value)
+  if mode == 'C':
+    for v in value:
+      xorState = xor(xorState, v)
+  else:
+    xorState = xor(xorState, value)
+  if DEBUG: print 'XOR State: {}'.format(xorState)
+  return xorState
+
+
+def printValue(root, xorState):
+  printNodes = root.children[0].children
+
+  if len(printNodes) == 1:
+    print '> {}'.format(repr(xorState))
+  else:
+    print ''.join([x.getText() for x in printNodes[1:]]).replace('"', '').replace("'", '')
+
+
+def run(root):
+  mode = DEFAULT_MODE
+  xorState = DEFAULT_STATE
+
+  for child in root.children:
+    nodeText = child.getText()
+    if not nodeText: continue
+    if 'print' in nodeText:
+      printValue(child, xorState)
+    elif 'XX' in nodeText:
+      xorState = DEFAULT_STATE
+    elif nodeText[0] == 'M':
+      mode = nodeText[-1]
+    elif hasattr(child, 'xor'):
+      value = getX(child)
+      if value:
+        xorState = getState(xorState, mode, value)
+
+
+def getTree(text):
+  lexer = XORLangLexer(text)
+  stream = CommonTokenStream(lexer)
+  parser = XORLangParser(stream)
+  return parser.program()
+
+
+def main(argv):
+  if len(argv) != 2:
+    print 'Usage: xorlang (setup|clean|code.xor)'
+    sys.exit(1)
+
+  if argv[1] == 'setup':
+    setup()
+    sys.exit(0)
+  elif argv[1] == 'clean':
+    clean()
+    sys.exit(0)
+  else:
+    try:
+      text = FileStream(argv[1])
+    except IOError:
+      print 'ERROR: Could not open file'
+      sys.exit(1)
+
+  tree = getTree(text)
+  run(tree)
+
+
+if __name__ == '__main__':
+  main(sys.argv)
